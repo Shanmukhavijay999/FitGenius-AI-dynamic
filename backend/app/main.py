@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.router import api_router
+from app.api.endpoints import auth, size_chart, recommend
 
 app = FastAPI(
     title="AI-Powered Size & Fit Chart Generator API",
@@ -18,8 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register the v1 API router
-app.include_router(api_router)
+# Register endpoint routers directly under /api/v1
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(size_chart.router, prefix="/api/v1")
+app.include_router(recommend.router, prefix="/api/v1")
 
 @app.get("/health", tags=["Health"])
 def health_check():
