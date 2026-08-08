@@ -1,5 +1,5 @@
 services:
-  # Render Web Service for Express Backend API & Static Frontend
+  # 1. Express Backend Service on Render
   - type: web
     name: fitgenius-ai-backend
     env: node
@@ -19,3 +19,16 @@ services:
         value: rzp_test_fitgenius_demo
       - key: RAZORPAY_KEY_SECRET
         value: fitgenius_demo_secret_key
+
+  # 2. Next.js Frontend Service on Render
+  - type: web
+    name: fitgenius-ai-frontend
+    env: node
+    region: singapore
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
