@@ -264,59 +264,6 @@ export default function LandingPage() {
     <>
       <CursorGlow />
 
-      {/* --- Navigation -------------------------------------- */}
-      <header
-        className={`fixed top-0 inset-x-0 z-40 transition-all duration-500 ${navBlur ? "glass-strong border-b border-white/08" : "bg-transparent"}`}
-      >
-        <div className="max-w-7xl mx-auto px-6 md:px-12 h-18 flex items-center justify-between py-4">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 transition-all duration-300 group-hover:scale-105 group-hover:shadow-indigo-500/40">
-              <Sparkles className="w-5 h-5 text-white" />
-              <div className="absolute inset-0 rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-base font-bold text-white tracking-tight leading-none">FitGenius</span>
-              <span className="text-[10px] text-white/30 font-medium tracking-wider uppercase">AI · Enterprise</span>
-            </div>
-          </Link>
-
-          <nav className="hidden md:flex items-center gap-6">
-            <Link
-              href="/seller/products"
-              className="text-sm font-semibold text-white/70 hover:text-white transition-all flex items-center gap-1.5"
-            >
-              <Database className="w-4 h-4 text-purple-400" />
-              <span>My Products</span>
-            </Link>
-            <Link
-              href="/seller/upload"
-              className="text-sm font-semibold text-white/70 hover:text-white transition-all flex items-center gap-1.5"
-            >
-              <Upload className="w-4 h-4 text-indigo-400" />
-              <span>Upload Garment</span>
-            </Link>
-            <Link
-              href="/recommend"
-              className="text-sm font-semibold text-white/70 hover:text-white transition-all flex items-center gap-1.5"
-            >
-              <Scale className="w-4 h-4 text-pink-400" />
-              <span>Find Size</span>
-            </Link>
-          </nav>
-
-          <div className="flex items-center gap-3">
-            <Link href="/seller/upload" className="btn-purple py-2.5 px-5 text-sm font-semibold flex items-center gap-2 rounded-xl">
-              <Upload className="w-4 h-4" />
-              <span>Seller Studio</span>
-            </Link>
-            <Link href="/recommend" className="btn-ghost py-2.5 px-5 text-sm font-semibold rounded-xl flex items-center gap-2">
-              <Scale className="w-4 h-4" />
-              <span>Find Your Size</span>
-            </Link>
-          </div>
-        </div>
-      </header>
-
       {/* --- Hero Section ------------------------------------ */}
       <Section className="min-h-screen flex flex-col justify-center items-center text-center pt-24 overflow-hidden grid-pattern">
         {/* Animated Orbs */}

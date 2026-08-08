@@ -177,31 +177,7 @@ export default function UploadPage() {
     <div className="min-h-screen bg-black text-white selection:bg-purple-500 selection:text-white">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* Header */}
-      <header className="fixed top-0 inset-x-0 z-40 glass-strong border-b border-white/08">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 transition-transform group-hover:scale-105">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-white leading-none">FitGenius</span>
-              <span className="text-[9px] text-purple-400 uppercase tracking-wider">AI Seller Studio</span>
-            </div>
-          </Link>
 
-          <div className="flex items-center gap-3">
-            <Link href="/seller/products" className="btn-purple py-2 px-4 text-xs font-semibold rounded-xl flex items-center gap-1.5">
-              <Database className="w-3.5 h-3.5" />
-              <span>My Products</span>
-            </Link>
-            <Link href="/recommend" className="btn-ghost py-2 px-4 text-xs font-semibold rounded-xl flex items-center gap-1.5">
-              <Scale className="w-3.5 h-3.5" />
-              <span>Customer Size Tool</span>
-            </Link>
-          </div>
-        </div>
-      </header>
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-6 md:px-12 pt-28 pb-20">
