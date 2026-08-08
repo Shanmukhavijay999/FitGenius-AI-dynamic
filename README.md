@@ -1,18 +1,46 @@
 # 🛍️ FitGenius AI — AI-Powered Fashion Shopping Platform
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16.3.0-black?logo=next.js)](https://nextjs.org/)
 [![Node.js Express](https://img.shields.io/badge/Express-4.19-green?logo=express)](https://expressjs.com/)
 [![SQLite DB](https://img.shields.io/badge/Database-SQLite-blue?logo=sqlite)](https://www.sqlite.org/)
 [![Gemini Vision AI](https://img.shields.io/badge/AI-Google_Gemini_Vision-purple?logo=google)](https://ai.google.dev/)
 [![Razorpay Payments](https://img.shields.io/badge/Payment-Razorpay_UPI-blueviolet?logo=razorpay)](https://razorpay.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## 🌐 Live URLs & Links
+## 🌐 Live URLs & Deployment Links
 
 - **GitHub Repository**: [https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic.git](https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic.git)
-- **Deployed App URL**: [https://fitgenius-ai.vercel.app](https://fitgenius-ai.vercel.app) *(Deployable on Vercel / Render / Supabase)*
+- **Render Live Backend**: [https://fitgenius-ai-backend.onrender.com](https://fitgenius-ai-backend.onrender.com)
+- **Vercel Live Frontend**: [https://fitgenius-ai-dynamic.vercel.app](https://fitgenius-ai-dynamic.vercel.app)
+
+---
+
+## 🚀 How to Deploy on Render (Step-by-Step)
+
+### Option 1: Automatic 1-Click Render Deployment (Recommended)
+Click the button below to automatically import `render.yaml` Blueprint into your Render account:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic)
+
+### Option 2: Manual Render Dashboard Setup
+1. Go to [Render Dashboard](https://dashboard.render.com/) and click **New +** → **Web Service**.
+2. Connect your GitHub repository: `https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic.git`.
+3. Configure the Web Service fields:
+   - **Name**: `fitgenius-ai-backend`
+   - **Root Directory**: `backend`
+   - **Environment**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `node server.js`
+4. Add Environment Variables under **Advanced**:
+   - `PORT` = `10000`
+   - `NODE_ENV` = `production`
+   - `GEMINI_API_KEY` = *your_gemini_api_key*
+   - `JWT_SECRET_KEY` = `super_secret_key_fitgenius_2026`
+   - `RAZORPAY_KEY_ID` = `rzp_test_fitgenius_demo`
+   - `RAZORPAY_KEY_SECRET` = `fitgenius_demo_secret_key`
+5. Click **Create Web Service**. Render will build and deploy your backend live!
 
 ---
 
@@ -34,7 +62,7 @@ graph TD
         AIChat[Floating Ask AI Chatbot]
     end
 
-    subgraph Server ["Backend (Node.js Express API - Port 8001)"]
+    subgraph Server ["Backend (Node.js Express API - Port 8001 / Render 10000)"]
         AuthMiddleware[JWT Auth Middleware]
         ProductsRouter[/api/v1/products]
         ShopRouter[/api/v1/shop]
@@ -83,7 +111,7 @@ sequenceDiagram
     actor Seller
     actor Customer
     participant Frontend as Next.js 16 App
-    participant Express as Express Backend
+    participant Express as Express Backend (Render)
     participant Gemini as Gemini Vision AI
     participant DB as SQLite DB
     participant Razorpay as Razorpay / UPI
@@ -215,40 +243,6 @@ erDiagram
 
 ---
 
-## 🌟 Key Features
-
-### 1. 🤖 AI Shopping Assistant ("Ask AI")
-- Floating chatbot button on every page.
-- Queries live SQLite database — **NEVER invents fake products**.
-- Interactive inline product cards inside chat messages with direct **View Product**, **Add to Wishlist (♡)**, and **Add to Cart (🛒)** actions.
-- Answers product questions, category searches, budget constraints (e.g. *"relaxed fit shirt under ₹1500"*), and fit advice.
-
-### 2. 📲 Razorpay & Scannable UPI QR Payment Gateway
-- 4-step checkout flow (Address → Summary → Payment → Confirmation).
-- Server-side price calculation directly from database (`products` table).
-- Dynamic scannable **UPI QR Code modal** (GPay, PhonePe, Paytm, BHIM) with 10-minute timer.
-- Signature verification via HMAC SHA256 (`POST /api/v1/payments/verify`) and automatic cart clearing.
-
-### 3. ♡ Wishlist System & Cart Persistence
-- Persistent `♡ Add to Wishlist` / `♥ Remove from Wishlist` toggle.
-- Real-time synchronized Wishlist and Cart count badges in Navbar.
-- Saved in SQLite `wishlist`, `cart`, and `cart_items` tables.
-
-### 4. 👕 Gemini Vision Size Chart Generator & Recommender
-- Drag & drop flat-lay garment photo upload.
-- Gemini Vision multimodal LLM extracts shoulder, chest, length, waist, and sleeve measurements.
-- 98% precision size matcher matching user body specs (Chest, Waist, Height, Weight).
-
-### 5. 📦 Orders Delivery Tracker
-- Visual 6-stage delivery timeline:
-  `Placed` → `Confirmed` → `Packed` → `Shipped` → `Out for Delivery` → `Delivered`
-
-### 6. 📊 Seller Dashboard & Analytics
-- Metrics for Total Products, Total Orders, Total Sales Revenue, Average Rating, Reviews, and Views.
-- Order fulfilment status updater for sellers.
-
----
-
 ## 🔌 API Endpoint Reference
 
 | Method | Endpoint | Description |
@@ -279,30 +273,12 @@ erDiagram
 
 ## ⚙️ Local Setup & Running
 
-### 1. Clone Repository
 ```bash
+# Clone Repository
 git clone https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic.git
 cd FitGenius-AI-dynamic
-```
 
-### 2. Install Dependencies
-```bash
-# Install root, backend, and frontend dependencies
-npm run install:all
-```
-
-### 3. Environment Variables
-Create `.env` in `backend/`:
-```env
-PORT=8001
-GEMINI_API_KEY=your_google_gemini_api_key_here
-JWT_SECRET_KEY=super_secret_key_fitgenius_2026
-RAZORPAY_KEY_ID=rzp_test_fitgenius_demo
-RAZORPAY_KEY_SECRET=fitgenius_demo_secret_key
-```
-
-### 4. Launch Development Servers
-```bash
+# Start Development Server
 npm run dev
 ```
 
@@ -313,4 +289,4 @@ npm run dev
 
 ## 📜 License
 
-Distributed under the **MIT License**. See `LICENSE` for more information.
+Distributed under the **MIT License**.

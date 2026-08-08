@@ -1,0 +1,20 @@
+services:
+  # Render Web Service for FitGenius Express Backend
+  - type: web
+    name: fitgenius-ai-backend
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && node server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET_KEY
+        value: super_secret_key_fitgenius_2026
+      - key: RAZORPAY_KEY_ID
+        value: rzp_test_fitgenius_demo
+      - key: RAZORPAY_KEY_SECRET
+        value: fitgenius_demo_secret_key
