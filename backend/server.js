@@ -58,8 +58,8 @@ app.use('/api/v1/addresses', addressesRouter);
 app.use('/api/v1/chat', chatRouter);
 app.use('/api/v1/seller/dashboard', sellerDashboardRouter);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+// Health check endpoints
+app.get(['/health', '/healthz'], (req, res) => {
   res.json({
     status: 'healthy',
     service: 'fitgenius-express-backend',
