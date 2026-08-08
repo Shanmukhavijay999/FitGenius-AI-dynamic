@@ -1,12 +1,12 @@
 services:
-  # Render Web Service for FitGenius Express Backend
+  # Render Web Service for Full FitGenius Stack (Express API + Next.js App)
   - type: web
-    name: fitgenius-ai-backend
+    name: fitgenius-ai-app
     env: node
     region: singapore
     plan: free
-    buildCommand: cd backend && npm install
-    startCommand: cd backend && node server.js
+    buildCommand: npm run install:all && npm run build --prefix frontend
+    startCommand: npm start
     envVars:
       - key: PORT
         value: 10000
