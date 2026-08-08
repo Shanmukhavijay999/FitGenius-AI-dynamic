@@ -280,45 +280,39 @@ export default function LandingPage() {
             </div>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8">
-            {["Features", "How It Works", "Analytics", "Security"].map((item) => (
-              <a
-                key={item}
-                href={`#${item.toLowerCase().replace(/\s+/g, "-")}`}
-                className="text-sm font-medium text-white/50 hover:text-white transition-all duration-200 hover:scale-105"
-              >
-                {item}
-              </a>
-            ))}
+          <nav className="hidden md:flex items-center gap-6">
+            <Link
+              href="/seller/products"
+              className="text-sm font-semibold text-white/70 hover:text-white transition-all flex items-center gap-1.5"
+            >
+              <Database className="w-4 h-4 text-purple-400" />
+              <span>My Products</span>
+            </Link>
+            <Link
+              href="/seller/upload"
+              className="text-sm font-semibold text-white/70 hover:text-white transition-all flex items-center gap-1.5"
+            >
+              <Upload className="w-4 h-4 text-indigo-400" />
+              <span>Upload Garment</span>
+            </Link>
+            <Link
+              href="/recommend"
+              className="text-sm font-semibold text-white/70 hover:text-white transition-all flex items-center gap-1.5"
+            >
+              <Scale className="w-4 h-4 text-pink-400" />
+              <span>Find Size</span>
+            </Link>
           </nav>
 
           <div className="flex items-center gap-3">
-            {user ? (
-              <>
-                <div className="flex items-center gap-2.5 glass rounded-xl px-3 py-2 border border-white/08">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="text-sm font-medium text-white/80 hidden sm:block">{user.name}</span>
-                </div>
-                <button
-                  onClick={handleSignOut}
-                  className="btn-ghost hidden sm:inline-flex py-2.5 px-5 text-sm"
-                >
-                  Sign Out
-                </button>
-              </>
-            ) : (
-              <>
-                <Link href="/login" className="btn-ghost hidden sm:inline-flex py-2.5 px-5 text-sm">
-                  Sign In
-                </Link>
-                <Link href="/login" className="btn-primary py-2.5 px-5 text-sm">
-                  <span>Try Free</span>
-                  <ArrowRight className="w-4 h-4 relative z-10" />
-                </Link>
-              </>
-            )}
+            <Link href="/seller/upload" className="btn-purple py-2.5 px-5 text-sm font-semibold flex items-center gap-2 rounded-xl">
+              <Upload className="w-4 h-4" />
+              <span>Seller Studio</span>
+            </Link>
+            <Link href="/recommend" className="btn-ghost py-2.5 px-5 text-sm font-semibold rounded-xl flex items-center gap-2">
+              <Scale className="w-4 h-4" />
+              <span>Find Your Size</span>
+            </Link>
           </div>
         </div>
       </header>

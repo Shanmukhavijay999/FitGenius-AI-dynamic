@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Upload, Sparkles, CheckCircle2, ArrowRight, ArrowLeft,
   RotateCcw, Scale, Info, Cpu, Database, Eye,
-  FileImage, X, Shirt,
+  FileImage, X, Shirt, Tag, Calendar, User, ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ToastContainer, ToastMessage } from "@/components/Toast";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
 interface SizeEntry {
   size: string;
   chest_cm: number;
@@ -19,7 +19,7 @@ interface SizeEntry {
   hip_cm: number;
 }
 
-interface SizeChart {
+interface SizeChartResult {
   chart_id: string;
   garment_name: string;
   garment_type: string;
@@ -28,556 +28,468 @@ interface SizeChart {
   sizes: SizeEntry[];
   ai_insight: string;
   generated_at: string;
-  source: string;
 }
 
-// ─── Processing stages ───────────────────────────────────────────────────────
+interface SavedProduct {
+  id: string;
+  name: string;
+  imageUrl: string;
+  category: string;
+  fabric: string;
+  fit: string;
+  sizeChart: SizeEntry[];
+  aiInsight: string;
+  createdAt: string;
+}
+
 const STAGES = [
-  { icon: Eye,      label: "Scanning garment image",        pct: 20 },
-  { icon: Cpu,      label: "Extracting measurements via AI", pct: 45 },
-  { icon: Database, label: "Building size chart",            pct: 75 },
-  { icon: CheckCircle2, label: "Finalizing results",         pct: 95 },
+  { icon: Eye, label: "Scanning garment image", pct: 25 },
+  { icon: Cpu, label: "Extracting structural specs", pct: 55 },
+  { icon: Database, label: "Building size chart matrix", pct: 85 },
+  { icon: CheckCircle2, label: "Saving product to database", pct: 100 },
 ];
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+export default function UploadPage() {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
 
-function NavBar({ user }: { user: { name: string } | null }) {
-  return (
-    <header className="fixed top-0 inset-x-0 z-40 glass-strong border-b border-white/08">
-      <div className="max-w-7xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 transition-transform group-hover:scale-105">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-bold text-white leading-none">FitGenius</span>
-            <span className="text-[9px] text-white/30 uppercase tracking-wider">AI · Seller</span>
-          </div>
-        </Link>
+  // Form Fields
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("T-Shirt");
+  const [fabric, setFabric] = useState("100% Organic Heavyweight Cotton (240 GSM)");
+  const [fit, setFit] = useState("Relaxed Oversized Fit");
+  const [tagsInput, setTagsInput] = useState("Premium, Oversized, Streetwear");
 
-        <div className="flex items-center gap-3">
-          {user && (
-            <div className="flex items-center gap-2 glass rounded-xl px-3 py-1.5 border border-white/08">
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-[10px] font-bold text-white">
-                {user.name.charAt(0).toUpperCase()}
-              </div>
-              <span className="text-xs font-medium text-white/70">{user.name}</span>
-            </div>
-          )}
-          <Link href="/recommend" className="btn-ghost py-2 px-4 text-sm">
-            <Scale className="w-3.5 h-3.5" />
-            <span>Find Size</span>
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
-}
+  // Workflow State
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [stageIdx, setStageIdx] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [savedProduct, setSavedProduct] = useState<SavedProduct | null>(null);
 
-function DropZone({
-  onFile,
-  file,
-  preview,
-}: {
-  onFile: (f: File) => void;
-  file: File | null;
-  preview: string | null;
-}) {
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(false);
-      const f = e.dataTransfer.files[0];
-      if (f && f.type.startsWith("image/")) onFile(f);
-    },
-    [onFile]
-  );
-
-  return (
-    <motion.div
-      className={`relative rounded-3xl border-2 border-dashed transition-all duration-300 overflow-hidden cursor-pointer
-        ${dragging ? "border-indigo-400 bg-indigo-500/08" : "border-white/12 bg-white/02 hover:border-indigo-500/40 hover:bg-white/03"}`}
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={handleDrop}
-      onClick={() => !file && inputRef.current?.click()}
-      whileHover={{ scale: file ? 1 : 1.005 }}
-      style={{ minHeight: 320 }}
-    >
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onFile(f);
-        }}
-      />
-
-      <AnimatePresence mode="wait">
-        {preview ? (
-          <motion.div
-            key="preview"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            className="w-full h-full flex items-center justify-center p-6"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={preview}
-              alt="Garment preview"
-              className="max-h-72 rounded-2xl object-contain shadow-2xl shadow-black/40"
-            />
-            <div className="absolute top-4 right-4 flex items-center gap-1.5 glass rounded-full px-3 py-1.5 border border-white/10">
-              <FileImage className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="text-xs text-white/60 font-medium truncate max-w-[140px]">
-                {file?.name}
-              </span>
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex flex-col items-center justify-center gap-5 py-16 px-8 text-center"
-          >
-            <motion.div
-              animate={{ y: [0, -8, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="w-20 h-20 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center"
-            >
-              <Upload className="w-9 h-9 text-indigo-400" />
-            </motion.div>
-            <div>
-              <p className="text-white/80 font-semibold text-lg mb-1">
-                Drop your garment image here
-              </p>
-              <p className="text-white/35 text-sm">
-                PNG, JPG, WebP — flat-lay or product photos work best
-              </p>
-            </div>
-            <div className="glass rounded-full px-5 py-2 border border-white/08 text-xs text-white/40 font-medium">
-              or click to browse files
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-function ProcessingView({ stage }: { stage: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      {/* Main spinner */}
-      <div className="flex flex-col items-center gap-6 py-8">
-        <div className="relative w-24 h-24">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            className="absolute inset-0 rounded-full border-2 border-transparent border-t-indigo-500 border-r-violet-500"
-          />
-          <motion.div
-            animate={{ rotate: -360 }}
-            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-            className="absolute inset-3 rounded-full border-2 border-transparent border-t-pink-500"
-          />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Cpu className="w-8 h-8 text-indigo-400" />
-          </div>
-        </div>
-        <div className="text-center">
-          <p className="text-white font-semibold text-lg">
-            {stage < STAGES.length ? STAGES[stage].label : "Finalizing…"}
-          </p>
-          <p className="text-white/40 text-sm mt-1">Gemini Vision is analyzing your garment</p>
-        </div>
-      </div>
-
-      {/* Stage progress */}
-      <div className="space-y-3">
-        {STAGES.map((s, i) => {
-          const Icon = s.icon;
-          const done = i < stage;
-          const active = i === stage;
-          return (
-            <div
-              key={i}
-              className={`flex items-center gap-3 rounded-2xl p-4 transition-all ${
-                active ? "glass border border-indigo-500/25 bg-indigo-500/05" :
-                done ? "opacity-60" : "opacity-25"
-              }`}
-            >
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                done ? "bg-emerald-500/15 border border-emerald-500/20" :
-                active ? "bg-indigo-500/20 border border-indigo-500/30" :
-                "bg-white/04 border border-white/08"
-              }`}>
-                {done
-                  ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  : <Icon className={`w-4 h-4 ${active ? "text-indigo-400" : "text-white/30"}`} />
-                }
-              </div>
-              <span className={`text-sm font-medium ${active ? "text-white" : done ? "text-white/60" : "text-white/25"}`}>
-                {s.label}
-              </span>
-              {active && (
-                <motion.div
-                  animate={{ opacity: [1, 0.3, 1] }}
-                  transition={{ duration: 1.2, repeat: Infinity }}
-                  className="ml-auto w-2 h-2 rounded-full bg-indigo-400"
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Progress bar */}
-      <div className="h-1.5 bg-white/05 rounded-full overflow-hidden">
-        <motion.div
-          className="h-full bg-gradient-to-r from-indigo-500 via-violet-500 to-pink-500 rounded-full"
-          animate={{ width: `${stage < STAGES.length ? STAGES[stage].pct : 100}%` }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-        />
-      </div>
-    </motion.div>
-  );
-}
-
-function SizeChartResult({ chart, onReset }: { chart: SizeChart; onReset: () => void }) {
-  const DIM_LABELS: Record<string, string> = {
-    chest_cm: "Chest", shoulder_cm: "Shoulder", length_cm: "Length",
-    waist_cm: "Waist", hip_cm: "Hip",
+  const addToast = (type: "success" | "error" | "info", title: string, description?: string) => {
+    const id = Date.now().toString();
+    setToasts((prev) => [...prev, { id, type, title, description }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
   };
-  const DIM_ORDER = ["chest_cm", "shoulder_cm", "length_cm", "waist_cm", "hip_cm"];
 
-  // Save chart to localStorage so /recommend can use it
-  useEffect(() => {
-    localStorage.setItem("fitgenius_chart", JSON.stringify(chart));
-  }, [chart]);
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-      className="space-y-6"
-    >
-      {/* Success header */}
-      <div className="flex items-center gap-4 p-5 rounded-2xl bg-emerald-500/06 border border-emerald-500/20">
-        <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
-          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-white truncate">{chart.garment_name}</p>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {[chart.garment_type, chart.fabric_type, chart.fit_style].map((tag) => (
-              <span key={tag} className="text-[10px] font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/15 rounded-full px-2 py-0.5">
-                {tag}
-              </span>
-            ))}
-            {chart.source === "mock" && (
-              <span className="text-[10px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/15 rounded-full px-2 py-0.5">
-                Demo Mode
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* AI Insight */}
-      <div className="p-4 rounded-2xl bg-indigo-500/05 border border-indigo-500/15 flex gap-3">
-        <Info className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-white/60 leading-relaxed">
-          <span className="font-semibold text-indigo-300">AI Insight: </span>
-          {chart.ai_insight}
-        </p>
-      </div>
-
-      {/* Size Chart Table */}
-      <div className="glass rounded-2xl overflow-hidden border border-white/06">
-        {/* Header */}
-        <div className="grid bg-white/03 border-b border-white/06 px-4 py-3"
-          style={{ gridTemplateColumns: `5rem repeat(${DIM_ORDER.length}, 1fr)` }}
-        >
-          <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Size</span>
-          {DIM_ORDER.map((d) => (
-            <span key={d} className="text-[10px] font-bold text-white/30 uppercase tracking-wider text-center">
-              {DIM_LABELS[d]}
-            </span>
-          ))}
-        </div>
-
-        {/* Rows */}
-        {chart.sizes.map((entry, i) => (
-          <motion.div
-            key={entry.size}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.06 }}
-            className="grid items-center px-4 py-3.5 border-b border-white/04 last:border-0 hover:bg-white/02 transition-colors"
-            style={{ gridTemplateColumns: `5rem repeat(${DIM_ORDER.length}, 1fr)` }}
-          >
-            <span className="font-bold text-sm text-indigo-300">{entry.size}</span>
-            {DIM_ORDER.map((d) => (
-              <span key={d} className="text-xs text-white/55 text-center font-mono">
-                {(entry as unknown as Record<string, number | string>)[d]}
-                <span className="text-white/25"> cm</span>
-              </span>
-            ))}
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        <Link
-          href={`/recommend?chart_id=${chart.chart_id}`}
-          className="btn-primary flex-1 py-3.5 text-sm"
-        >
-          <Scale className="w-4 h-4 relative z-10" />
-          <span>Find Customer Size</span>
-          <ArrowRight className="w-4 h-4 relative z-10" />
-        </Link>
-        <button
-          onClick={onReset}
-          className="btn-ghost py-3.5 px-5 text-sm"
-        >
-          <RotateCcw className="w-4 h-4" />
-          <span>New Upload</span>
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-type PageState = "idle" | "processing" | "done" | "error";
-
-export default function SellerUploadPage() {
-  const [file, setFile]             = useState<File | null>(null);
-  const [preview, setPreview]       = useState<string | null>(null);
-  const [productName, setProductName] = useState("");
-  const [pageState, setPageState]   = useState<PageState>("idle");
-  const [stage, setStage]           = useState(0);
-  const [chart, setChart]           = useState<SizeChart | null>(null);
-  const [error, setError]           = useState("");
-  const [user, setUser]             = useState<{ name: string } | null>(null);
-
-  useEffect(() => {
-    const u = localStorage.getItem("fitgenius_user");
-    if (u) setUser(JSON.parse(u));
-  }, []);
-
-  const handleFile = useCallback((f: File) => {
+  const handleFile = (f: File) => {
     setFile(f);
-    const reader = new FileReader();
-    reader.onload = (e) => setPreview(e.target?.result as string);
-    reader.readAsDataURL(f);
-  }, []);
-
-  const handleReset = () => {
-    setFile(null);
-    setPreview(null);
-    setProductName("");
-    setPageState("idle");
-    setStage(0);
-    setChart(null);
-    setError("");
+    const url = URL.createObjectURL(f);
+    setPreview(url);
+    if (!name) {
+      const baseName = f.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+      setName(baseName.charAt(0).toUpperCase() + baseName.slice(1));
+    }
   };
 
-  const handleGenerate = async () => {
-    if (!file) return;
-    setPageState("processing");
-    setStage(0);
-    setError("");
+  const handleGenerateAndSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file && !preview) {
+      addToast("error", "Image Required", "Please upload a garment photo first.");
+      return;
+    }
+    if (!name.trim()) {
+      addToast("error", "Name Required", "Please enter a product name.");
+      return;
+    }
 
-    // Animate through stages while the API call is in flight
-    const stageInterval = setInterval(() => {
-      setStage((s) => Math.min(s + 1, STAGES.length - 1));
-    }, 900);
+    setIsProcessing(true);
+    setStageIdx(0);
+    setProgress(15);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      if (productName.trim()) formData.append("product_name", productName.trim());
+      // Step 1: Request AI size chart generation
+      setStageIdx(1);
+      setProgress(45);
 
-      const res = await fetch("/api/v1/size-chart/generate", {
+      const resGen = await fetch("/api/v1/size-chart/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          category,
+          fabric: fabric.trim(),
+          fit: fit.trim(),
+        }),
+      });
+
+      if (!resGen.ok) throw new Error("AI Size Chart Generation failed");
+      const chartData: SizeChartResult = await resGen.json();
+
+      setStageIdx(2);
+      setProgress(75);
+
+      // Step 2: Upload product & save to permanent database
+      const formData = new FormData();
+      if (file) formData.append("file", file);
+      formData.append("name", name.trim());
+      formData.append("seller_id", "usr-seller-001");
+      formData.append("seller_name", "Apex Apparel Studio");
+      formData.append("category", category);
+      formData.append("fabric", fabric.trim());
+      formData.append("fit", fit.trim());
+      formData.append(
+        "tags",
+        JSON.stringify(tagsInput.split(",").map((t) => t.trim()).filter(Boolean))
+      );
+      formData.append("size_chart", JSON.stringify(chartData.sizes));
+      formData.append("ai_insight", chartData.ai_insight);
+
+      setStageIdx(3);
+      setProgress(95);
+
+      const resProd = await fetch("/api/v1/products", {
         method: "POST",
         body: formData,
       });
 
-      clearInterval(stageInterval);
+      if (!resProd.ok) throw new Error("Failed to save product in database");
+      const prodResult = await resProd.json();
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: "Unknown error" }));
-        throw new Error(err.detail ?? "Failed to generate size chart.");
-      }
-
-      const data: SizeChart = await res.json();
-      setStage(STAGES.length);
-      await new Promise((r) => setTimeout(r, 400)); // brief success pause
-      setChart(data);
-      setPageState("done");
-    } catch (err: unknown) {
-      clearInterval(stageInterval);
-      setError((err as Error).message ?? "Something went wrong. Please try again.");
-      setPageState("error");
+      setProgress(100);
+      setSavedProduct(prodResult);
+      addToast("success", "Product Saved Permanently!", `"${name}" is now stored in database.`);
+    } catch (err: any) {
+      console.error(err);
+      addToast("error", "Processing Failed", err.message || "Could not complete upload.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
+  const handleReset = () => {
+    setFile(null);
+    setPreview(null);
+    setName("");
+    setSavedProduct(null);
+    setProgress(0);
+  };
+
   return (
-    <div className="min-h-screen bg-black text-white">
-      <NavBar user={user} />
+    <div className="min-h-screen bg-black text-white selection:bg-purple-500 selection:text-white">
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="orb orb-indigo w-[600px] h-[600px] -top-48 -left-32 opacity-20" />
-        <div className="orb orb-violet w-[400px] h-[400px] top-1/2 right-0 opacity-15" />
-        <div className="absolute inset-0 grid-pattern opacity-40" />
-      </div>
-
-      <main className="relative z-10 pt-24 pb-20 px-6">
-        <div className="max-w-3xl mx-auto">
-
-          {/* Page header */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-10"
-          >
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-white/30 hover:text-white/60 text-sm font-medium transition-colors mb-6"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to home
-            </Link>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center">
-                <Shirt className="w-5 h-5 text-indigo-400" />
-              </div>
-              <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest glass border border-indigo-500/20 rounded-full px-3 py-1">
-                Seller Dashboard
-              </span>
+      {/* Header */}
+      <header className="fixed top-0 inset-x-0 z-40 glass-strong border-b border-white/08">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 transition-transform group-hover:scale-105">
+              <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">
-              Generate{" "}
-              <span className="text-gradient">Size Chart</span>
-            </h1>
-            <p className="text-white/40 mt-3 text-lg leading-relaxed">
-              Upload a flat-lay or product photo. Gemini Vision extracts measurements and builds a complete S–2XL size chart in seconds.
-            </p>
-          </motion.div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-white leading-none">FitGenius</span>
+              <span className="text-[9px] text-purple-400 uppercase tracking-wider">AI Seller Studio</span>
+            </div>
+          </Link>
 
-          {/* Main card */}
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="glass-strong rounded-3xl p-8 border border-white/08 shadow-2xl shadow-indigo-500/05"
-          >
-            <AnimatePresence mode="wait">
-              {pageState === "idle" || pageState === "error" ? (
-                <motion.div key="upload" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  {/* Drop zone */}
-                  <DropZone onFile={handleFile} file={file} preview={preview} />
+          <div className="flex items-center gap-3">
+            <Link href="/seller/products" className="btn-purple py-2 px-4 text-xs font-semibold rounded-xl flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5" />
+              <span>My Products</span>
+            </Link>
+            <Link href="/recommend" className="btn-ghost py-2 px-4 text-xs font-semibold rounded-xl flex items-center gap-1.5">
+              <Scale className="w-3.5 h-3.5" />
+              <span>Customer Size Tool</span>
+            </Link>
+          </div>
+        </div>
+      </header>
 
-                  {/* Product name (optional) */}
-                  <div className="mt-6">
-                    <label className="text-xs font-bold text-white/35 uppercase tracking-widest block mb-2">
-                      Product Name <span className="text-white/20 font-normal normal-case">(optional)</span>
+      {/* Main Container */}
+      <main className="max-w-7xl mx-auto px-6 md:px-12 pt-28 pb-20">
+        {!savedProduct ? (
+          <div className="max-w-4xl mx-auto space-y-8">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-semibold mb-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>AI Garment Analyzer</span>
+              </div>
+              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Upload Garment Image</h1>
+              <p className="text-white/50 text-sm mt-1">
+                Upload your apparel photo to generate an automated AI size chart and permanently save it to the store database.
+              </p>
+            </div>
+
+            <form onSubmit={handleGenerateAndSave} className="space-y-8">
+              {/* Image Dropzone */}
+              <div className="glass-strong rounded-3xl p-8 border border-white/10 text-center relative overflow-hidden group">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFile(f);
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer z-20"
+                />
+
+                {preview ? (
+                  <div className="relative w-full max-w-xs mx-auto h-64 rounded-2xl overflow-hidden glass border border-white/20">
+                    <img src={preview} alt="Garment preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      className="absolute top-2 right-2 p-1.5 rounded-xl bg-black/70 text-white/80 hover:text-white z-30"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4 py-8 pointer-events-none">
+                    <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mx-auto transition-transform group-hover:scale-110">
+                      <Upload className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white mb-1">
+                        Drag & Drop garment photo or <span className="text-purple-400 underline">Browse</span>
+                      </h3>
+                      <p className="text-xs text-white/40">Supports JPG, PNG, WEBP up to 15MB</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Garment Details Inputs */}
+              <div className="glass-strong rounded-3xl p-6 md:p-8 border border-white/10 space-y-6">
+                <h3 className="text-base font-bold flex items-center gap-2">
+                  <Shirt className="w-4 h-4 text-purple-400" />
+                  <span>Garment Specifications</span>
+                </h3>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                      Product Name *
                     </label>
                     <input
                       type="text"
-                      value={productName}
-                      onChange={(e) => setProductName(e.target.value)}
-                      placeholder="e.g. Classic Linen Shirt"
-                      className="w-full glass rounded-2xl border border-white/08 bg-white/02 px-5 py-4 text-sm text-white/80 placeholder-white/20 outline-none focus:border-indigo-500/40 transition-colors"
+                      required
+                      placeholder="e.g. Minimalist Obsidian Oversized Tee"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full bg-white/05 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-purple-500"
                     />
                   </div>
 
-                  {/* Error message */}
-                  <AnimatePresence>
-                    {pageState === "error" && error && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="mt-4 flex items-center gap-3 p-4 rounded-2xl bg-red-500/08 border border-red-500/20"
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                        Category
+                      </label>
+                      <select
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500"
                       >
-                        <X className="w-4 h-4 text-red-400 flex-shrink-0" />
-                        <p className="text-sm text-red-300">{error}</p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                        <option value="T-Shirt">T-Shirt</option>
+                        <option value="Shirt">Shirt</option>
+                        <option value="Hoodie">Hoodie</option>
+                        <option value="Jacket">Jacket</option>
+                        <option value="Sweatshirt">Sweatshirt</option>
+                        <option value="Dress">Dress</option>
+                      </select>
+                    </div>
 
-                  {/* Action button */}
-                  <div className="mt-6 flex gap-3">
-                    <button
-                      onClick={handleGenerate}
-                      disabled={!file}
-                      className="btn-primary flex-1 py-4 text-base disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
-                    >
-                      <Sparkles className="w-5 h-5 relative z-10" />
-                      <span>Generate Size Chart</span>
-                      <ArrowRight className="w-4 h-4 relative z-10" />
-                    </button>
-                    {file && (
-                      <button onClick={handleReset} className="btn-ghost py-4 px-5">
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                        Fit Style
+                      </label>
+                      <input
+                        type="text"
+                        value={fit}
+                        onChange={(e) => setFit(e.target.value)}
+                        placeholder="e.g. Relaxed Oversized Fit, Slim Fit"
+                        className="w-full bg-white/05 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
                   </div>
-                </motion.div>
-              ) : pageState === "processing" ? (
-                <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <ProcessingView stage={stage} />
-                </motion.div>
-              ) : pageState === "done" && chart ? (
-                <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <SizeChartResult chart={chart} onReset={handleReset} />
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
-          </motion.div>
 
-          {/* Tips */}
-          {pageState === "idle" && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="mt-6 grid sm:grid-cols-3 gap-4"
-            >
-              {[
-                { icon: FileImage, title: "Flat-lay works best", desc: "Place garment flat, well-lit, on a neutral background." },
-                { icon: Eye,       title: "Include all angles", desc: "Front view is required. Back view improves accuracy." },
-                { icon: CheckCircle2, title: "Higher res = better AI", desc: "At least 800×800 px for best measurement extraction." },
-              ].map((tip) => (
-                <div key={tip.title} className="glass rounded-2xl p-5 border border-white/05">
-                  <tip.icon className="w-4 h-4 text-indigo-400 mb-3" />
-                  <p className="text-xs font-semibold text-white/70 mb-1">{tip.title}</p>
-                  <p className="text-xs text-white/30 leading-relaxed">{tip.desc}</p>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                      Fabric Material & Weight
+                    </label>
+                    <input
+                      type="text"
+                      value={fabric}
+                      onChange={(e) => setFabric(e.target.value)}
+                      placeholder="e.g. 100% Organic Heavyweight Cotton (240 GSM)"
+                      className="w-full bg-white/05 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
                 </div>
-              ))}
-            </motion.div>
-          )}
-        </div>
+
+                {/* Processing Progress Bar */}
+                {isProcessing && (
+                  <div className="space-y-3 pt-4 border-t border-white/10">
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className="text-purple-300 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 animate-spin" />
+                        {STAGES[stageIdx]?.label || "Processing..."}
+                      </span>
+                      <span>{progress}%</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
+                        animate={{ width: `${progress}%` }}
+                        transition={{ duration: 0.3 }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isProcessing}
+                  className="btn-purple w-full py-3.5 text-sm font-semibold flex items-center justify-center gap-2 rounded-2xl shadow-xl shadow-purple-500/20"
+                >
+                  {isProcessing ? (
+                    <span>Processing AI Size Chart & Saving...</span>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>Generate AI Size Chart & Save to DB</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          /* Automatically Display Generated Product & Confirmation */
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-4xl mx-auto space-y-8"
+          >
+            {/* Banner */}
+            <div className="glass-strong rounded-3xl p-6 border border-emerald-500/40 bg-emerald-950/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-emerald-300">Product Successfully Uploaded & Saved!</h3>
+                  <p className="text-xs text-emerald-200/70">Permanently available in the database and store catalogue.</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/seller/products"
+                  className="btn-purple py-2 px-4 text-xs font-semibold rounded-xl flex items-center gap-1.5"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>View in My Products</span>
+                </Link>
+                <button
+                  onClick={handleReset}
+                  className="btn-ghost py-2 px-3 text-xs font-semibold rounded-xl flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Upload Another</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Generated Product Display */}
+            <div className="glass-strong rounded-3xl p-6 md:p-8 border border-white/10 space-y-8">
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-8">
+                {/* Image */}
+                <div className="sm:col-span-5">
+                  <div className="w-full h-72 rounded-2xl overflow-hidden glass border border-white/10">
+                    <img
+                      src={savedProduct.imageUrl}
+                      alt={savedProduct.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+
+                {/* Details */}
+                <div className="sm:col-span-7 space-y-4">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-purple-400">{savedProduct.category}</span>
+                    <h2 className="text-2xl font-bold text-white">{savedProduct.name}</h2>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="glass p-3 rounded-xl border border-white/05">
+                      <span className="text-[9px] uppercase font-bold text-white/40 block">Fabric</span>
+                      <span className="font-semibold text-white">{savedProduct.fabric}</span>
+                    </div>
+                    <div className="glass p-3 rounded-xl border border-white/05">
+                      <span className="text-[9px] uppercase font-bold text-white/40 block">Fit Style</span>
+                      <span className="font-semibold text-white">{savedProduct.fit}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-white/50">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5" />
+                      Created {new Date(savedProduct.createdAt).toLocaleDateString()}
+                    </span>
+                    <span>•</span>
+                    <span className="text-emerald-400 font-semibold">✓ Database Stored</span>
+                  </div>
+
+                  {savedProduct.aiInsight && (
+                    <div className="glass p-4 rounded-2xl border border-purple-500/30 bg-purple-950/20 text-xs text-white/80">
+                      <div className="flex items-center gap-1.5 font-bold text-purple-400 mb-1">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>AI Insight</span>
+                      </div>
+                      <p>{savedProduct.aiInsight}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Generated Size Chart Table */}
+              <div className="space-y-3 pt-6 border-t border-white/10">
+                <h3 className="text-base font-bold flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <span>AI Generated Size Chart Matrix</span>
+                </h3>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/10 text-white/40 uppercase">
+                        <th className="py-2.5 px-3">Size</th>
+                        <th className="py-2.5 px-3">Chest (cm)</th>
+                        <th className="py-2.5 px-3">Shoulder (cm)</th>
+                        <th className="py-2.5 px-3">Length (cm)</th>
+                        <th className="py-2.5 px-3">Waist (cm)</th>
+                        <th className="py-2.5 px-3">Hip (cm)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/05 font-medium">
+                      {savedProduct.sizeChart?.map((s, idx) => (
+                        <tr key={idx} className="hover:bg-white/05">
+                          <td className="py-3 px-3 font-bold text-purple-300">{s.size}</td>
+                          <td className="py-3 px-3 text-white/80">{s.chest_cm}</td>
+                          <td className="py-3 px-3 text-white/80">{s.shoulder_cm}</td>
+                          <td className="py-3 px-3 text-white/80">{s.length_cm}</td>
+                          <td className="py-3 px-3 text-white/80">{s.waist_cm}</td>
+                          <td className="py-3 px-3 text-white/80">{s.hip_cm}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </main>
     </div>
   );

@@ -1,16 +1,41 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Scale, Sparkles, ArrowLeft, ArrowRight, CheckCircle2,
-  RotateCcw, Info, AlertCircle, Upload,
-  Ruler,
+  RotateCcw, Info, AlertCircle, Upload, Ruler, Shirt,
+  Star, User, Check, Eye
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ToastContainer, ToastMessage } from "@/components/Toast";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+interface SizeEntry {
+  size: string;
+  chest_cm: number;
+  shoulder_cm: number;
+  length_cm: number;
+  waist_cm: number;
+  hip_cm: number;
+}
+
+interface Product {
+  id: string;
+  sellerId: string;
+  sellerName: string;
+  name: string;
+  imageUrl: string;
+  category: string;
+  fabric: string;
+  fit: string;
+  tags: string[];
+  sizeChart: SizeEntry[];
+  aiInsight: string;
+  rating: number;
+  reviewCount: number;
+  views: number;
+}
 
 interface DimensionScore {
   dimension: string;
@@ -24,561 +49,510 @@ interface RecommendResult {
   recommended_size: string;
   confidence_pct: number;
   fit_description: string;
-  ai_explanation: string;
+  reason: string;
   dimension_scores: DimensionScore[];
   alternative_size: string | null;
   alternative_note: string | null;
 }
 
-interface StoredChart {
-  chart_id: string;
-  garment_name: string;
-  garment_type: string;
-  fit_style: string;
-  fabric_type: string;
-  sizes: {
-    size: string;
-    chest_cm: number;
-    shoulder_cm: number;
-    length_cm: number;
-    waist_cm: number;
-    hip_cm: number;
-  }[];
-}
+function RecommendContent() {
+  const searchParams = useSearchParams();
+  const initialProductId = searchParams.get("product_id");
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [loadingProducts, setLoadingProducts] = useState(true);
 
-function NavBar() {
-  return (
-    <header className="fixed top-0 inset-x-0 z-40 glass-strong border-b border-white/08">
-      <div className="max-w-7xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 transition-transform group-hover:scale-105">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-bold text-white leading-none">FitGenius</span>
-            <span className="text-[9px] text-white/30 uppercase tracking-wider">AI · Customer</span>
-          </div>
-        </Link>
-        <Link href="/seller/upload" className="btn-ghost py-2 px-4 text-sm">
-          <Upload className="w-3.5 h-3.5" />
-          <span>Upload Garment</span>
-        </Link>
-      </div>
-    </header>
-  );
-}
+  // Measurement Inputs
+  const [height, setHeight] = useState("175");
+  const [weight, setWeight] = useState("70");
+  const [chest, setChest] = useState("98");
+  const [waist, setWaist] = useState("84");
+  const [hip, setHip] = useState("96");
+  const [shoulder, setShoulder] = useState("44");
 
-function MeasurementInput({
-  label, value, onChange, unit = "cm", min, max, placeholder,
-}: {
-  label: string; value: string; onChange: (v: string) => void;
-  unit?: string; min?: number; max?: number; placeholder?: string;
-}) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <div className="relative">
-      <motion.div
-        animate={{
-          borderColor: focused ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.08)",
-          boxShadow:   focused ? "0 0 0 3px rgba(99,102,241,0.08)" : "none",
-        }}
-        transition={{ duration: 0.2 }}
-        className="relative rounded-2xl border bg-white/02"
-        style={{ borderWidth: 1 }}
-      >
-        <label className="absolute left-4 top-3 text-[10px] font-bold text-white/30 uppercase tracking-wider">
-          {label}
-        </label>
-        <div className="flex items-center">
-          <input
-            type="number"
-            value={value}
-            min={min}
-            max={max}
-            placeholder={placeholder ?? "—"}
-            onChange={(e) => onChange(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            className="w-full bg-transparent text-white text-base font-semibold font-mono px-4 pt-7 pb-3 outline-none"
-          />
-          <span className="pr-4 text-sm font-medium text-white/25 flex-shrink-0">{unit}</span>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
+  const [calculating, setCalculating] = useState(false);
+  const [result, setResult] = useState<RecommendResult | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-function ConfidenceRing({ pct }: { pct: number }) {
-  const r = 52;
-  const circ = 2 * Math.PI * r;
-  const dash = (pct / 100) * circ;
-
-  const color =
-    pct >= 90 ? "#34d399" :
-    pct >= 75 ? "#a5b4fc" :
-    pct >= 60 ? "#fbbf24" : "#f87171";
-
-  return (
-    <div className="relative w-36 h-36 flex items-center justify-center">
-      <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 120 120">
-        <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
-        <motion.circle
-          cx="60" cy="60" r={r} fill="none"
-          stroke={color} strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${circ}`}
-          initial={{ strokeDasharray: `0 ${circ}` }}
-          animate={{ strokeDasharray: `${dash} ${circ}` }}
-          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-        />
-      </svg>
-      <div className="text-center">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.5 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="text-3xl font-black text-white"
-        >
-          {pct.toFixed(0)}%
-        </motion.div>
-        <div className="text-[10px] text-white/30 font-semibold uppercase tracking-wider mt-0.5">
-          Confidence
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ResultCard({ result, garmentName }: { result: RecommendResult; garmentName: string }) {
-  const noteColor = (note: string) => {
-    if (note.toLowerCase().includes("perfect")) return "text-emerald-400";
-    if (note.toLowerCase().includes("snug") || note.toLowerCase().includes("slightly"))
-      return "text-amber-400";
-    if (note.toLowerCase().includes("tight") || note.toLowerCase().includes("loose"))
-      return "text-red-400";
-    return "text-white/40";
+  const addToast = (type: "success" | "error" | "info", title: string, description?: string) => {
+    const id = Date.now().toString();
+    setToasts((prev) => [...prev, { id, type, title, description }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
   };
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-      className="space-y-5"
-    >
-      {/* Hero result */}
-      <div className="relative overflow-hidden rounded-3xl p-8 bg-gradient-to-br from-indigo-600/15 to-violet-600/10 border border-indigo-500/25">
-        <div className="orb orb-indigo w-48 h-48 -top-12 -right-12 opacity-20 pointer-events-none" />
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
-        <div className="relative z-10 flex items-start justify-between gap-6">
-          <div>
-            <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2">
-              Recommended Size
-            </p>
-            <motion.div
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 300, damping: 25, delay: 0.1 }}
-              className="text-8xl font-black text-white tracking-tighter leading-none mb-3"
-            >
-              {result.recommended_size}
-            </motion.div>
-            <p className="text-sm text-white/50 max-w-xs leading-relaxed">
-              {result.fit_description}
-            </p>
-            {result.alternative_size && (
-              <p className="mt-3 text-xs text-white/35">
-                <span className="text-amber-300 font-semibold">Alt: Size {result.alternative_size}</span>
-                {" "}— {result.alternative_note}
-              </p>
-            )}
-          </div>
-          <ConfidenceRing pct={result.confidence_pct} />
-        </div>
-      </div>
-
-      {/* AI Explanation */}
-      <div className="p-5 rounded-2xl bg-white/02 border border-white/06 flex gap-3">
-        <Info className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
-        <p className="text-sm text-white/55 leading-relaxed">
-          <span className="font-semibold text-indigo-300">AI Explanation: </span>
-          {result.ai_explanation}
-        </p>
-      </div>
-
-      {/* Dimension scores */}
-      {result.dimension_scores.length > 0 && (
-        <div className="glass rounded-2xl p-5 border border-white/06 space-y-4">
-          <p className="text-xs font-bold text-white/30 uppercase tracking-wider">Dimension Match</p>
-          {result.dimension_scores.map((d, i) => (
-            <motion.div
-              key={d.dimension}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 + i * 0.07 }}
-              className="flex items-center gap-3"
-            >
-              <span className="text-xs text-white/40 w-20 flex-shrink-0">{d.dimension}</span>
-              <div className="flex-1 h-2 bg-white/05 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-violet-400"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${d.match_pct}%` }}
-                  transition={{ duration: 1, delay: 0.2 + i * 0.08, ease: [0.16, 1, 0.3, 1] }}
-                />
-              </div>
-              <span className="text-xs font-mono text-white/40 w-10 text-right flex-shrink-0">
-                {d.match_pct.toFixed(0)}%
-              </span>
-              <span className={`text-[10px] font-semibold w-24 text-right flex-shrink-0 ${noteColor(d.note)}`}>
-                {d.note}
-              </span>
-            </motion.div>
-          ))}
-        </div>
-      )}
-
-      {/* Product badge */}
-      {garmentName && (
-        <p className="text-xs text-white/25 text-center">
-          Based on size chart for <span className="text-white/50 font-semibold">{garmentName}</span>
-        </p>
-      )}
-    </motion.div>
-  );
-}
-
-// ─── Demo size chart (fallback when no chart is stored) ──────────────────────
-
-const DEMO_CHART: StoredChart = {
-  chart_id: "demo",
-  garment_name: "Classic Relaxed T-Shirt (Demo)",
-  garment_type: "T-Shirt",
-  fit_style: "Relaxed",
-  fabric_type: "Cotton",
-  sizes: [
-    { size: "XS", chest_cm: 48, shoulder_cm: 42, length_cm: 66, waist_cm: 46, hip_cm: 48 },
-    { size: "S",  chest_cm: 52, shoulder_cm: 44, length_cm: 68, waist_cm: 50, hip_cm: 52 },
-    { size: "M",  chest_cm: 56, shoulder_cm: 46, length_cm: 70, waist_cm: 54, hip_cm: 56 },
-    { size: "L",  chest_cm: 60, shoulder_cm: 48, length_cm: 72, waist_cm: 58, hip_cm: 60 },
-    { size: "XL", chest_cm: 64, shoulder_cm: 50, length_cm: 74, waist_cm: 62, hip_cm: 64 },
-    { size: "2XL",chest_cm: 68, shoulder_cm: 52, length_cm: 76, waist_cm: 66, hip_cm: 68 },
-  ],
-};
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-export default function RecommendPage() {
-  const searchParams = useSearchParams();
-
-  const [chart, setChart]       = useState<StoredChart>(DEMO_CHART);
-  const [height, setHeight]     = useState("178");
-  const [weight, setWeight]     = useState("74");
-  const [chest, setChest]       = useState("98");
-  const [waist, setWaist]       = useState("82");
-  const [hip, setHip]           = useState("");
-  const [shoulder, setShoulder] = useState("");
-
-  const [loading, setLoading]   = useState(false);
-  const [result, setResult]     = useState<RecommendResult | null>(null);
-  const [error, setError]       = useState("");
-
-  // Load stored chart from localStorage (set by /seller/upload)
+  // Fetch products from database
   useEffect(() => {
-    const stored = localStorage.getItem("fitgenius_chart");
-    if (stored) {
+    async function fetchProducts() {
+      setLoadingProducts(true);
       try {
-        setChart(JSON.parse(stored));
-      } catch {
-        // ignore
+        const res = await fetch("/api/v1/products");
+        if (!res.ok) throw new Error("Failed to load database products");
+        const data: Product[] = await res.json();
+        setProducts(data);
+
+        if (data.length > 0) {
+          if (initialProductId) {
+            const found = data.find((p) => p.id === initialProductId);
+            setSelectedProduct(found || data[0]);
+          } else {
+            setSelectedProduct(data[0]);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        addToast("error", "Database Error", "Could not fetch products from server.");
+      } finally {
+        setLoadingProducts(false);
       }
     }
-  }, [searchParams]);
+    fetchProducts();
+  }, [initialProductId]);
 
-  const validate = () => {
-    if (!height || !weight || !chest || !waist) return "Please fill in all required fields.";
-    if (Number(chest) < 50 || Number(chest) > 180) return "Chest must be between 50–180 cm.";
-    if (Number(waist) < 40 || Number(waist) > 180) return "Waist must be between 40–180 cm.";
-    if (Number(height) < 100 || Number(height) > 250) return "Height must be between 100–250 cm.";
-    if (Number(weight) < 30 || Number(weight) > 300) return "Weight must be between 30–300 kg.";
-    return null;
-  };
-
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+  const handleCalculateFit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const err = validate();
-    if (err) { setError(err); return; }
-    setError("");
-    setLoading(true);
-    setResult(null);
+    if (!selectedProduct) return;
 
+    setCalculating(true);
     try {
-      const body = {
-        body: {
-          height_cm:   Number(height),
-          weight_kg:   Number(weight),
-          chest_cm:    Number(chest),
-          waist_cm:    Number(waist),
-          hip_cm:      hip ? Number(hip) : null,
-          shoulder_cm: shoulder ? Number(shoulder) : null,
-        },
-        sizes:         chart.sizes,
-        garment_type:  chart.garment_type,
-        fit_style:     chart.fit_style,
-        garment_name:  chart.garment_name,
-      };
-
       const res = await fetch("/api/v1/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          product_id: selectedProduct.id,
+          height_cm: parseFloat(height) || 175,
+          weight_kg: parseFloat(weight) || 70,
+          chest_cm: parseFloat(chest) || 98,
+          waist_cm: parseFloat(waist) || 84,
+          hip_cm: parseFloat(hip) || 96,
+          shoulder_cm: parseFloat(shoulder) || 44,
+        }),
       });
 
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({ detail: "Unknown error" }));
-        throw new Error(e.detail ?? "Failed to get recommendation.");
-      }
-
-      const data: RecommendResult = await res.json();
+      if (!res.ok) throw new Error("Calculation failed");
+      const data = await res.json();
       setResult(data);
-    } catch (e: unknown) {
-      setError((e as Error).message ?? "Something went wrong. Please try again.");
+      addToast("success", "Fit Match Calculated!", `Recommended Size: ${data.recommended_size}`);
+    } catch (err) {
+      console.error(err);
+      addToast("error", "Calculation Error", "Failed to compute fit recommendation.");
     } finally {
-      setLoading(false);
+      setCalculating(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [height, weight, chest, waist, hip, shoulder, chart]);
+  };
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <NavBar />
+    <div className="min-h-screen bg-black text-white selection:bg-purple-500 selection:text-white">
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="orb orb-violet w-[500px] h-[500px] -top-32 right-0 opacity-20" />
-        <div className="orb orb-indigo w-[400px] h-[400px] bottom-0 -left-24 opacity-15" />
-        <div className="absolute inset-0 grid-pattern opacity-40" />
-      </div>
+      {/* Header */}
+      <header className="fixed top-0 inset-x-0 z-40 glass-strong border-b border-white/08">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 transition-transform group-hover:scale-105">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-white leading-none">FitGenius</span>
+              <span className="text-[9px] text-purple-400 uppercase tracking-wider">AI Customer Recommendation</span>
+            </div>
+          </Link>
+          <Link href="/seller/upload" className="btn-purple py-2 px-4 text-xs font-semibold rounded-xl flex items-center gap-1.5">
+            <Upload className="w-3.5 h-3.5" />
+            <span>Upload Garment</span>
+          </Link>
+        </div>
+      </header>
 
-      <main className="relative z-10 pt-24 pb-20 px-6">
-        <div className="max-w-5xl mx-auto">
-
-          {/* Page header */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-10"
-          >
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-white/30 hover:text-white/60 text-sm font-medium transition-colors mb-6"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to home
+      {/* Main Container */}
+      <main className="max-w-7xl mx-auto px-6 md:px-12 pt-28 pb-20 space-y-10">
+        {/* Top Product Selector & Selected Garment Banner */}
+        {loadingProducts ? (
+          <div className="glass rounded-3xl p-8 border border-white/08 animate-pulse flex items-center justify-center">
+            <div className="flex items-center gap-3 text-white/50 text-sm">
+              <Sparkles className="w-5 h-5 text-purple-400 animate-spin" />
+              <span>Fetching database products...</span>
+            </div>
+          </div>
+        ) : products.length === 0 ? (
+          <div className="glass rounded-3xl p-8 border border-white/08 text-center">
+            <h3 className="text-lg font-bold mb-2">No Products Available</h3>
+            <p className="text-white/50 text-xs mb-4">Upload a product from the seller dashboard first.</p>
+            <Link href="/seller/upload" className="btn-purple py-2.5 px-5 text-xs font-semibold rounded-xl inline-flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              <span>Go to Seller Upload</span>
             </Link>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-2xl bg-violet-500/15 border border-violet-500/20 flex items-center justify-center">
-                <Scale className="w-5 h-5 text-violet-400" />
-              </div>
-              <span className="text-xs font-bold text-violet-400 uppercase tracking-widest glass border border-violet-500/20 rounded-full px-3 py-1">
-                Size Recommender
-              </span>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">
-              Find Your{" "}
-              <span className="text-gradient">Perfect Size</span>
-            </h1>
-            <p className="text-white/40 mt-3 text-lg leading-relaxed">
-              Enter your measurements and our AI will match you to the best size with a confidence score and explanation.
-            </p>
-          </motion.div>
-
-          {/* Garment context badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="mb-6 flex items-center gap-3 glass rounded-2xl p-4 border border-white/06 w-fit"
-          >
-            <Ruler className="w-4 h-4 text-violet-400 flex-shrink-0" />
-            <div>
-              <p className="text-xs text-white/30 font-medium">Sizing chart for:</p>
-              <p className="text-sm font-bold text-white">{chart.garment_name}</p>
-            </div>
-            <div className="ml-2 flex gap-1.5 flex-wrap">
-              {[chart.garment_type, chart.fit_style].map((t) => (
-                <span key={t} className="text-[10px] font-semibold text-violet-300 bg-violet-500/10 border border-violet-500/15 rounded-full px-2 py-0.5">
-                  {t}
-                </span>
-              ))}
-            </div>
-            {chart.chart_id === "demo" && (
-              <span className="text-[10px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/15 rounded-full px-2 py-0.5">
-                Demo
-              </span>
-            )}
-          </motion.div>
-
-          {/* Main grid */}
-          <div className="grid lg:grid-cols-2 gap-8">
-
-            {/* Left: Form */}
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.7, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <div className="glass-strong rounded-3xl p-8 border border-white/08 shadow-2xl">
-                <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                  <Ruler className="w-5 h-5 text-violet-400" />
-                  Your Measurements
-                </h2>
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <MeasurementInput label="Height *" value={height} onChange={setHeight} unit="cm" min={100} max={250} placeholder="178" />
-                    <MeasurementInput label="Weight *" value={weight} onChange={setWeight} unit="kg" min={30} max={300} placeholder="74" />
-                    <MeasurementInput label="Chest *" value={chest} onChange={setChest} unit="cm" min={50} max={180} placeholder="98" />
-                    <MeasurementInput label="Waist *" value={waist} onChange={setWaist} unit="cm" min={40} max={180} placeholder="82" />
-                    <MeasurementInput label="Hip" value={hip} onChange={setHip} unit="cm" min={50} max={200} placeholder="optional" />
-                    <MeasurementInput label="Shoulder" value={shoulder} onChange={setShoulder} unit="cm" min={30} max={70} placeholder="optional" />
+          </div>
+        ) : (
+          selectedProduct && (
+            <div className="glass-strong rounded-3xl p-6 md:p-8 border border-white/10 relative overflow-hidden">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                {/* Left: Product Info Card */}
+                <div className="flex items-center gap-6">
+                  <div className="w-24 h-28 md:w-32 md:h-36 rounded-2xl overflow-hidden glass border border-white/10 shrink-0">
+                    <img
+                      src={selectedProduct.imageUrl}
+                      alt={selectedProduct.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px] font-semibold uppercase">
+                      {selectedProduct.category}
+                    </div>
+                    <h1 className="text-xl md:text-2xl font-bold text-white leading-tight">
+                      {selectedProduct.name}
+                    </h1>
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-white/60">
+                      <span className="flex items-center gap-1">
+                        <User className="w-3.5 h-3.5 text-purple-400" />
+                        Seller: <strong className="text-white">{selectedProduct.sellerName}</strong>
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Shirt className="w-3.5 h-3.5 text-indigo-400" />
+                        Fabric: {selectedProduct.fabric}
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Ruler className="w-3.5 h-3.5 text-pink-400" />
+                        Fit: {selectedProduct.fit}
+                      </span>
+                    </div>
 
-                  <p className="text-[11px] text-white/25 mt-2">
-                    * Required. Hip and shoulder improve accuracy.
-                  </p>
+                    <div className="flex items-center gap-4 text-xs pt-1">
+                      <span className="flex items-center gap-1 text-amber-400 font-bold">
+                        <Star className="w-3.5 h-3.5 fill-amber-400" />
+                        {selectedProduct.rating} ({selectedProduct.reviewCount} reviews)
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-                  <AnimatePresence>
-                    {error && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="flex items-center gap-3 p-4 rounded-2xl bg-red-500/08 border border-red-500/20"
-                      >
-                        <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                        <p className="text-sm text-red-300">{error}</p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  <div className="flex gap-3 pt-2">
-                    <motion.button
-                      type="submit"
-                      disabled={loading}
-                      whileTap={{ scale: 0.97 }}
-                      className="btn-primary flex-1 py-4 text-base disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
+                {/* Right: Product Switcher Dropdown */}
+                {products.length > 1 && (
+                  <div className="w-full lg:w-auto">
+                    <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                      Switch Product
+                    </label>
+                    <select
+                      value={selectedProduct.id}
+                      onChange={(e) => {
+                        const found = products.find((p) => p.id === e.target.value);
+                        if (found) {
+                          setSelectedProduct(found);
+                          setResult(null);
+                        }
+                      }}
+                      className="w-full lg:w-64 bg-zinc-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
                     >
-                      {loading ? (
-                        <>
-                          <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-                            className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full relative z-10"
-                          />
-                          <span>Finding your size…</span>
-                        </>
-                      ) : (
-                        <>
-                          <Scale className="w-5 h-5 relative z-10" />
-                          <span>Get Recommendation</span>
-                          <ArrowRight className="w-4 h-4 relative z-10" />
-                        </>
-                      )}
-                    </motion.button>
-                    {result && (
-                      <button
-                        type="button"
-                        onClick={() => setResult(null)}
-                        className="btn-ghost py-4 px-4"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                    )}
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.category})
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                </form>
+                )}
               </div>
 
-              {/* Upload prompt */}
-              {chart.chart_id === "demo" && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                  className="mt-4 p-4 rounded-2xl bg-amber-500/06 border border-amber-500/15 flex items-center gap-3"
-                >
-                  <Info className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-xs text-amber-300/80">
-                      Using demo chart.{" "}
-                      <Link href="/seller/upload" className="font-bold underline hover:text-amber-200">
-                        Upload a real garment
-                      </Link>{" "}
-                      to get measurements for your specific product.
-                    </p>
-                  </div>
-                </motion.div>
+              {/* AI Insight banner */}
+              {selectedProduct.aiInsight && (
+                <div className="mt-6 pt-6 border-t border-white/08 text-xs text-white/70 flex items-start gap-3">
+                  <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                  <p><strong className="text-white">AI Insight:</strong> {selectedProduct.aiInsight}</p>
+                </div>
               )}
-            </motion.div>
+            </div>
+          )
+        )}
 
-            {/* Right: Result */}
-            <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="lg:sticky lg:top-24 self-start"
-            >
+        {/* Input Form & Recommendation Breakdown Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left Column: Body Measurement Form */}
+          <div className="lg:col-span-5">
+            <div className="glass-strong rounded-3xl p-6 border border-white/08 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                  <Ruler className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold">Your Body Measurements</h2>
+                  <p className="text-xs text-white/50">Enter specs to calculate AI size match</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleCalculateFit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                      Height (cm)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={height}
+                      onChange={(e) => setHeight(e.target.value)}
+                      className="w-full bg-white/05 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                      Weight (kg)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={weight}
+                      onChange={(e) => setWeight(e.target.value)}
+                      className="w-full bg-white/05 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                      Chest (cm)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={chest}
+                      onChange={(e) => setChest(e.target.value)}
+                      className="w-full bg-white/05 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                      Waist (cm)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={waist}
+                      onChange={(e) => setWaist(e.target.value)}
+                      className="w-full bg-white/05 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                      Hip (cm)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={hip}
+                      onChange={(e) => setHip(e.target.value)}
+                      className="w-full bg-white/05 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-white/40 mb-1">
+                      Shoulder (cm)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={shoulder}
+                      onChange={(e) => setShoulder(e.target.value)}
+                      className="w-full bg-white/05 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={calculating || !selectedProduct}
+                  className="btn-purple w-full py-3 text-sm font-semibold flex items-center justify-center gap-2 rounded-xl shadow-lg shadow-purple-500/20"
+                >
+                  {calculating ? (
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 animate-spin" />
+                      Analyzing Dimensions...
+                    </span>
+                  ) : (
+                    <>
+                      <Scale className="w-4 h-4" />
+                      <span>Find Your Perfect Size</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Right Column: Visual Matching & Recommendation Output */}
+          <div className="lg:col-span-7 space-y-6">
+            {!result ? (
+              <div className="glass-strong rounded-3xl p-10 border border-white/08 text-center flex flex-col items-center justify-center h-full min-h-[380px]">
+                <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
+                  <Scale className="w-8 h-8" />
+                </div>
+                <h3 className="text-lg font-bold mb-2">Ready for Fit Analysis</h3>
+                <p className="text-xs text-white/50 max-w-sm">
+                  Enter your body measurements on the left and click "Find Your Perfect Size" to get instant AI size recommendations with animated visual matching.
+                </p>
+              </div>
+            ) : (
               <AnimatePresence mode="wait">
-                {result ? (
-                  <ResultCard key="result" result={result} garmentName={chart.garment_name} />
-                ) : (
-                  <motion.div
-                    key="placeholder"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="glass-strong rounded-3xl p-10 border border-white/08 flex flex-col items-center justify-center text-center gap-6 min-h-[420px]"
-                  >
-                    <div className="relative">
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                        className="w-20 h-20 rounded-full border border-dashed border-white/10"
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <Scale className="w-8 h-8 text-white/20" />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="space-y-6"
+                >
+                  {/* Recommendation Summary Card with Visual Side-by-Side */}
+                  <div className="glass-strong rounded-3xl p-6 md:p-8 border border-purple-500/40 bg-purple-950/20 relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row items-center gap-6">
+                      {/* Uploaded Garment Image */}
+                      {selectedProduct && (
+                        <div className="w-36 h-44 rounded-2xl overflow-hidden glass border border-white/10 shrink-0 relative group">
+                          <img
+                            src={selectedProduct.imageUrl}
+                            alt={selectedProduct.name}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2">
+                            <span className="text-[10px] font-bold text-white truncate">{selectedProduct.name}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Recommendation Details */}
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+                            Recommended Size
+                          </span>
+                          <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
+                            {result.confidence_pct}% Confidence
+                          </span>
+                        </div>
+
+                        <div className="flex items-baseline gap-3">
+                          <span className="text-5xl font-black text-white tracking-tight">
+                            {result.recommended_size}
+                          </span>
+                          <span className="text-sm font-semibold text-purple-300">
+                            — {result.fit_description}
+                          </span>
+                        </div>
+
+                        {/* Detailed Reasons */}
+                        <div className="text-xs text-white/80 whitespace-pre-line leading-relaxed bg-black/40 p-3.5 rounded-2xl border border-white/05 font-mono">
+                          {result.reason}
+                        </div>
+
+                        {/* Alternative Size note */}
+                        {result.alternative_size && (
+                          <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl flex items-center justify-between">
+                            <span>
+                              <strong>Alternative Size:</strong> {result.alternative_size}
+                            </span>
+                            <span className="text-[11px] opacity-80">{result.alternative_note}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div>
-                      <p className="text-white/50 font-semibold mb-2">Waiting for measurements</p>
-                      <p className="text-sm text-white/25 leading-relaxed max-w-xs">
-                        Fill in your body measurements and hit "Get Recommendation" to see your perfect size with AI analysis.
-                      </p>
-                    </div>
+                  </div>
 
-                    {/* Size preview */}
-                    <div className="flex gap-2">
-                      {chart.sizes.map((s) => (
-                        <div key={s.size} className="w-10 h-10 rounded-xl glass border border-white/06 flex items-center justify-center text-xs font-bold text-white/25">
-                          {s.size}
-                        </div>
-                      ))}
-                    </div>
+                  {/* VISUAL MATCHING: Interactive Size Chart with Highlighted Animated Row */}
+                  {selectedProduct && selectedProduct.sizeChart && (
+                    <div className="glass-strong rounded-3xl p-6 border border-white/08 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base font-bold flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-purple-400" />
+                          <span>Visual Size Chart Match</span>
+                        </h3>
+                        <span className="text-xs text-emerald-400 font-semibold animate-pulse">
+                          ✓ Size {result.recommended_size} Row Highlighted
+                        </span>
+                      </div>
 
-                    <div className="flex items-center gap-2 text-[11px] text-white/20 font-medium">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/40" />
-                      <span>AI-powered · Instant result · Confidence scored</span>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-white/10 text-white/40 uppercase">
+                              <th className="py-2.5 px-3">Size</th>
+                              <th className="py-2.5 px-3">Chest (cm)</th>
+                              <th className="py-2.5 px-3">Shoulder (cm)</th>
+                              <th className="py-2.5 px-3">Length (cm)</th>
+                              <th className="py-2.5 px-3">Waist (cm)</th>
+                              <th className="py-2.5 px-3">Hip (cm)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/05">
+                            {selectedProduct.sizeChart.map((row, idx) => {
+                              const isMatched = row.size === result.recommended_size;
+                              return (
+                                <motion.tr
+                                  key={idx}
+                                  animate={
+                                    isMatched
+                                      ? { backgroundColor: "rgba(168, 85, 247, 0.25)" }
+                                      : { backgroundColor: "rgba(255, 255, 255, 0.01)" }
+                                  }
+                                  className={`transition-colors ${
+                                    isMatched ? "border-l-4 border-l-purple-500 font-bold" : ""
+                                  }`}
+                                >
+                                  <td className="py-3 px-3">
+                                    <span
+                                      className={`inline-block px-2.5 py-0.5 rounded-lg text-xs font-bold ${
+                                        isMatched
+                                          ? "bg-purple-500 text-white shadow-lg shadow-purple-500/50"
+                                          : "bg-white/05 text-white/70"
+                                      }`}
+                                    >
+                                      {row.size}
+                                    </span>
+                                  </td>
+                                  <td className={`py-3 px-3 ${isMatched ? "text-purple-200 font-bold" : "text-white/70"}`}>
+                                    {row.chest_cm}
+                                  </td>
+                                  <td className={`py-3 px-3 ${isMatched ? "text-purple-200 font-bold" : "text-white/70"}`}>
+                                    {row.shoulder_cm}
+                                  </td>
+                                  <td className={`py-3 px-3 ${isMatched ? "text-purple-200 font-bold" : "text-white/70"}`}>
+                                    {row.length_cm}
+                                  </td>
+                                  <td className={`py-3 px-3 ${isMatched ? "text-purple-200 font-bold" : "text-white/70"}`}>
+                                    {row.waist_cm}
+                                  </td>
+                                  <td className={`py-3 px-3 ${isMatched ? "text-purple-200 font-bold" : "text-white/70"}`}>
+                                    {row.hip_cm}
+                                  </td>
+                                </motion.tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </motion.div>
-                )}
+                  )}
+                </motion.div>
               </AnimatePresence>
-            </motion.div>
+            )}
           </div>
         </div>
       </main>
     </div>
+  );
+}
+
+export default function RecommendPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black text-white p-12">Loading...</div>}>
+      <RecommendContent />
+    </Suspense>
   );
 }

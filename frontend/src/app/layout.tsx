@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { CartWishlistProvider } from "@/contexts/CartWishlistContext";
+import { Navbar } from "@/components/Navbar";
+import { AIChatbot } from "@/components/AIChatbot";
 
-/** Primary body font – clean, legible, modern */
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
 });
 
-/** Display / heading font – geometric, premium feel */
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space",
   subsets: ["latin"],
@@ -17,13 +19,13 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "FitGenius AI — Dynamic Size & Fit Chart Generator",
+  title: "FitGenius AI — AI-Powered Fashion Shopping Platform",
   description:
-    "Enterprise AI SaaS platform that auto-generates apparel size charts from garment images and recommends the perfect fit for every customer.",
-  keywords: ["size chart", "AI", "fashion", "fit recommendation", "apparel", "Gemini Vision"],
+    "Enterprise AI SaaS fashion platform with automated size charts, instant AI fit recommendation, wishlist, cart, orders, and Razorpay payment gateway.",
+  keywords: ["size chart", "AI", "fashion", "fit recommendation", "e-commerce", "shopping assistant"],
   openGraph: {
-    title: "FitGenius AI — Dynamic Size & Fit Chart Generator",
-    description: "Upload a garment image, get a dynamic size chart in seconds.",
+    title: "FitGenius AI — AI-Powered Fashion Platform",
+    description: "Find your perfect size, shop apparel with instant AI recommendations.",
     type: "website",
   },
 };
@@ -37,7 +39,15 @@ export default function RootLayout({
       className={`${inter.variable} ${spaceGrotesk.variable} scroll-smooth`}
     >
       <body className="min-h-screen antialiased bg-black text-white overflow-x-hidden">
-        {children}
+        <AuthProvider>
+          <CartWishlistProvider>
+            <Navbar />
+            <div className="pt-16 min-h-screen">
+              {children}
+            </div>
+            <AIChatbot />
+          </CartWishlistProvider>
+        </AuthProvider>
       </body>
     </html>
   );

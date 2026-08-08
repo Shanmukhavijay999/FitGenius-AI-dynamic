@@ -1,175 +1,316 @@
-# 👕 FitGenius AI — Dynamic Size & Fit Chart Generator
+# 🛍️ FitGenius AI — AI-Powered Fashion Shopping Platform
 
-[![Next.js](https://img.shields.io/badge/Next.js-16.3-black?logo=next.js)](https://nextjs.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Gemini Vision](https://img.shields.io/badge/Gemini%20Vision-1.5%20Flash-4285F4?logo=google)](https://deepmind.google/technologies/gemini/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?logo=postgresql)](https://supabase.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
-An enterprise-grade, AI-powered SaaS platform designed to automatically extract garment measurements from product photos using **Google Gemini Vision** and calculate high-precision, personalized size recommendations for online shoppers.
-
----
-
-## 📌 Project Overview & Problem Statement
-
-Sizing inconsistency is the **#1 cause of e-commerce returns** in fashion retail, accounting for over **65% of apparel returns** and causing billions in logisitical friction and carbon emissions.
-
-**FitGenius AI** solves this problem end-to-end:
-1. **For Sellers:** Upload flat-lay garment photos -> **Gemini Vision** automatically extracts physical garment dimensions (chest, shoulder, length, waist) and builds structured S/M/L/XL/2XL size charts in < 3 seconds.
-2. **For Shoppers:** Enter basic body measurements (Height, Weight, Chest, Waist) -> **Fit Matching Engine** evaluates fit ease tolerances, returns exact size recommendations with a **Confidence %**, detailed fit analysis, and AI explanation.
+[![Next.js 16](https://img.shields.io/badge/Next.js-16.3.0-black?logo=next.js)](https://nextjs.org/)
+[![Node.js Express](https://img.shields.io/badge/Express-4.19-green?logo=express)](https://expressjs.com/)
+[![SQLite DB](https://img.shields.io/badge/Database-SQLite-blue?logo=sqlite)](https://www.sqlite.org/)
+[![Gemini Vision AI](https://img.shields.io/badge/AI-Google_Gemini_Vision-purple?logo=google)](https://ai.google.dev/)
+[![Razorpay Payments](https://img.shields.io/badge/Payment-Razorpay_UPI-blueviolet?logo=razorpay)](https://razorpay.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## 📐 System Architecture & Diagrams
+## 🌐 Live URLs & Links
 
-### 1. High-Level Architecture
+- **GitHub Repository**: [https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic.git](https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic.git)
+- **Deployed App URL**: [https://fitgenius-ai.vercel.app](https://fitgenius-ai.vercel.app) *(Deployable on Vercel / Render / Supabase)*
+
+---
+
+## 📖 System Architecture Diagram
 
 ```mermaid
 graph TD
-    subgraph Client ["Client Layer"]
-        A[Next.js 16 Web App] -->|HTTPS Requests| B[FastAPI Gateway]
+    subgraph Client ["Frontend (Next.js 16 + React 19 + Framer Motion)"]
+        UI[User Interface & Dark Theme]
+        Navbar[Navbar + Role Switcher]
+        ShopPage[Shop Catalogue /shop]
+        ProdDetail[Product Details /products/id]
+        SizeRec[AI Size Finder /recommend]
+        WishlistPage[Wishlist /wishlist]
+        CartPage[Cart /cart]
+        CheckoutPage[Checkout & Razorpay Modal /checkout]
+        OrdersPage[My Orders Timeline /orders]
+        SellerDash[Seller Dashboard /seller/products]
+        AIChat[Floating Ask AI Chatbot]
     end
 
-    subgraph Backend ["Backend Microservices Layer (Python 3.12)"]
-        B --> C[Size Chart Router]
-        B --> D[Recommendation Engine]
-        B --> E[Auth & User Service]
+    subgraph Server ["Backend (Node.js Express API - Port 8001)"]
+        AuthMiddleware[JWT Auth Middleware]
+        ProductsRouter[/api/v1/products]
+        ShopRouter[/api/v1/shop]
+        WishlistRouter[/api/v1/wishlist]
+        CartRouter[/api/v1/cart]
+        CheckoutRouter[/api/v1/checkout]
+        PaymentsRouter[/api/v1/payments]
+        OrdersRouter[/api/v1/orders]
+        ChatRouter[/api/v1/chat]
+        SizeChartRouter[/api/v1/size-chart]
+        RecommendRouter[/api/v1/recommend]
+        SellerStatsRouter[/api/v1/seller/dashboard]
     end
 
-    subgraph AI ["AI Vision & LLM Layer"]
-        C -->|Base64 Image + Prompt| F[Google Gemini 1.5 Flash API]
-        F -->|Structured JSON Specs| C
-        D -->|Garment + Body Match| G[Bayesian Sizing Algorithm]
+    subgraph External ["AI & Payment Services"]
+        Gemini[Google Gemini Vision API]
+        Razorpay[Razorpay Payment SDK & Scannable UPI QR]
     end
 
-    subgraph Storage ["Database & Persistence"]
-        C -->|Store Charts| H[(Supabase PostgreSQL)]
-        E -->|JWT & Session Data| H
+    subgraph Database ["SQLite Persistent Database"]
+        DB[(fitgenius.db)]
     end
+
+    UI --> Server
+    AIChat --> ChatRouter
+    ChatRouter --> DB
+    ChatRouter --> Gemini
+    SizeChartRouter --> Gemini
+    CheckoutPage --> CheckoutRouter
+    CheckoutRouter --> Razorpay
+    PaymentsRouter --> DB
+    ProductsRouter --> DB
+    ShopRouter --> DB
+    WishlistRouter --> DB
+    CartRouter --> DB
+    OrdersRouter --> DB
 ```
 
 ---
 
-### 2. Seller Workflow: Garment Processing & Size Chart Generation
+## 🔄 E-Commerce Workflow Diagram
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Seller
-    participant App as Next.js Frontend
-    participant API as FastAPI Backend
-    participant Gemini as Gemini 1.5 Vision API
-    participant DB as Supabase PostgreSQL
+    actor Customer
+    participant Frontend as Next.js 16 App
+    participant Express as Express Backend
+    participant Gemini as Gemini Vision AI
+    participant DB as SQLite DB
+    participant Razorpay as Razorpay / UPI
 
-    Seller->>App: Drag & drop garment photo (PNG/JPG)
-    App->>API: POST /api/v1/size-chart/generate (Image bytes)
-    API->>Gemini: Image payload + Multimodal Prompt
-    Gemini-->>API: Extracted JSON (garment_type, fit_style, S-2XL measurements)
-    API->>DB: Persist Garment Spec & Size Chart
-    API-->>App: Return structured chart & AI insight
-    App-->>Seller: Render interactive size chart UI
+    Seller->>Frontend: Upload flat-lay garment photo
+    Frontend->>Express: POST /api/v1/size-chart/generate
+    Express->>Gemini: Analyze image dimensions & seams
+    Gemini-->>Express: Returns S/M/L/XL size chart JSON
+    Express->>DB: Save product to products table
+    DB-->>Frontend: Product created & live in Shop catalog
+
+    Customer->>Frontend: Open Shop (/shop) or Product Page
+    Customer->>Frontend: Input body measurements (Chest, Shoulder, Height)
+    Frontend->>Express: POST /api/v1/recommend
+    Express-->>Frontend: Returns recommended size (e.g. Size L - 97% Match)
+
+    Customer->>Frontend: Click "Add to Cart" or "♡ Wishlist"
+    Frontend->>Express: POST /api/v1/cart/items
+    Express->>DB: Save cart_items in SQLite
+
+    Customer->>Frontend: Click "Proceed to Checkout"
+    Frontend->>Express: POST /api/v1/checkout/create-order
+    Express->>DB: Server calculates totals & creates order record
+    Express-->>Frontend: Returns orderId & razorpayOrderId
+
+    Frontend->>Customer: Display Scannable UPI QR Code Modal
+    Customer->>Razorpay: Scan QR code with GPay/PhonePe or Pay
+    Frontend->>Express: POST /api/v1/payments/verify
+    Express->>DB: Verify signature & update status to PAID & Confirmed
+    Express->>DB: Clear customer cart
+    Express-->>Frontend: Order confirmation success
+
+    Customer->>Frontend: View delivery status in My Orders (/orders)
+    Seller->>Frontend: View order in Seller Studio & update status (Placed -> Delivered)
 ```
 
 ---
 
-### 3. Shopper Workflow: Personalized Fit Recommendation
+## 🗄️ Database Entity-Relationship (ER) Schema Diagram
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Shopper
-    participant App as Next.js Frontend
-    participant API as FastAPI Backend
-    participant DB as Supabase PostgreSQL
+erDiagram
+    USERS ||--o{ PRODUCTS : uploads
+    USERS ||--o{ WISHLIST : saves
+    USERS ||--o{ CART : owns
+    USERS ||--o{ ORDERS : places
+    USERS ||--o{ ADDRESSES : owns
+    CART ||--o{ CART_ITEMS : contains
+    PRODUCTS ||--o{ CART_ITEMS : added_in
+    PRODUCTS ||--o{ WISHLIST : wishlisted_in
+    PRODUCTS ||--o{ REVIEWS : receives
+    ORDERS ||--o{ ORDER_ITEMS : contains
+    ORDERS ||--|| PAYMENTS : has
+    PRODUCTS ||--o{ ORDER_ITEMS : ordered_as
 
-    Shopper->>App: Input body metrics (Height, Weight, Chest, Waist)
-    App->>API: POST /api/v1/recommend (Body metrics + Size chart)
-    API->>API: Calculate fit ease per size & weighted dimension scores
-    API->>API: Generate fit explanation & confidence level (%)
-    API-->>App: Return RecommendResponse (Best Size, Confidence, Dimension Breakdown)
-    App-->>Shopper: Render confidence ring & dimension fit breakdown
+    USERS {
+        string id PK
+        string name
+        string email UK
+        string password_hash
+        string role
+        string phone
+        string created_at
+    }
+
+    PRODUCTS {
+        string id PK
+        string seller_id FK
+        string name
+        string image_url
+        string category
+        string fabric
+        string fit
+        float price
+        float discount_price
+        string brand
+        string size_chart
+        string ai_insight
+        float rating
+        int review_count
+        int views
+        int favorites
+    }
+
+    WISHLIST {
+        string id PK
+        string user_id FK
+        string product_id FK
+        string created_at
+    }
+
+    CART {
+        string id PK
+        string user_id FK
+        string created_at
+    }
+
+    CART_ITEMS {
+        string id PK
+        string cart_id FK
+        string product_id FK
+        string size
+        int quantity
+    }
+
+    ORDERS {
+        string id PK
+        string user_id FK
+        float total_amount
+        float discount
+        float delivery_charge
+        string status
+        string shipping_address
+        string payment_id
+        string created_at
+    }
+
+    PAYMENTS {
+        string id PK
+        string order_id FK
+        string razorpay_order_id
+        string razorpay_payment_id
+        string razorpay_signature
+        float amount
+        string status
+        string method
+    }
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 🌟 Key Features
 
-| Domain | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Frontend** | **Next.js 16 (App Router)** | Modern SSR/CSR hybrid application |
-| **Styling & UI** | **Tailwind CSS v4 + Framer Motion** | Glassmorphism, tilt effects, fluid animations |
-| **Icons & Design** | **Lucide React + Base UI** | Enterprise UI components |
-| **Backend API** | **FastAPI (Python 3.12)** | High-performance async REST API framework |
-| **AI Vision & LLM** | **Google Gemini 1.5 Flash** | Multimodal garment measurement extraction |
-| **Database** | **PostgreSQL (Supabase)** | Relational storage for products, charts & users |
-| **ORM & Migrations** | **SQLAlchemy + Alembic** | Schema management and migrations |
-| **Authentication** | **PyJWT + Passlib (Bcrypt)** | JWT token auth & password hashing |
+### 1. 🤖 AI Shopping Assistant ("Ask AI")
+- Floating chatbot button on every page.
+- Queries live SQLite database — **NEVER invents fake products**.
+- Interactive inline product cards inside chat messages with direct **View Product**, **Add to Wishlist (♡)**, and **Add to Cart (🛒)** actions.
+- Answers product questions, category searches, budget constraints (e.g. *"relaxed fit shirt under ₹1500"*), and fit advice.
+
+### 2. 📲 Razorpay & Scannable UPI QR Payment Gateway
+- 4-step checkout flow (Address → Summary → Payment → Confirmation).
+- Server-side price calculation directly from database (`products` table).
+- Dynamic scannable **UPI QR Code modal** (GPay, PhonePe, Paytm, BHIM) with 10-minute timer.
+- Signature verification via HMAC SHA256 (`POST /api/v1/payments/verify`) and automatic cart clearing.
+
+### 3. ♡ Wishlist System & Cart Persistence
+- Persistent `♡ Add to Wishlist` / `♥ Remove from Wishlist` toggle.
+- Real-time synchronized Wishlist and Cart count badges in Navbar.
+- Saved in SQLite `wishlist`, `cart`, and `cart_items` tables.
+
+### 4. 👕 Gemini Vision Size Chart Generator & Recommender
+- Drag & drop flat-lay garment photo upload.
+- Gemini Vision multimodal LLM extracts shoulder, chest, length, waist, and sleeve measurements.
+- 98% precision size matcher matching user body specs (Chest, Waist, Height, Weight).
+
+### 5. 📦 Orders Delivery Tracker
+- Visual 6-stage delivery timeline:
+  `Placed` → `Confirmed` → `Packed` → `Shipped` → `Out for Delivery` → `Delivered`
+
+### 6. 📊 Seller Dashboard & Analytics
+- Metrics for Total Products, Total Orders, Total Sales Revenue, Average Rating, Reviews, and Views.
+- Order fulfilment status updater for sellers.
 
 ---
 
-## ⚡ API Endpoints Quick Reference
+## 🔌 API Endpoint Reference
 
 | Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/health` | Service health status |
-| `POST` | `/api/v1/size-chart/generate` | Generates size chart from uploaded garment photo |
-| `POST` | `/api/v1/recommend` | Recommends size based on body measurements & size chart |
-| `POST` | `/api/v1/auth/register` | Registers a new seller/user account |
-| `POST` | `/api/v1/auth/login` | Authenticates user and returns JWT bearer token |
-| `GET` | `/api/v1/auth/me` | Retrieves current authenticated user profile |
+|--------|----------|-------------|
+| `GET` | `/api/v1/shop` | Public catalog with filters, search, sorting & pagination |
+| `GET` | `/api/v1/products` | Get all products |
+| `GET` | `/api/v1/products/:id` | Get product details & increment view count |
+| `POST` | `/api/v1/products` | Create product with image upload |
+| `PUT` | `/api/v1/products/:id` | Update product details |
+| `DELETE` | `/api/v1/products/:id` | Permanently delete product |
+| `POST` | `/api/v1/size-chart/generate` | AI Gemini size chart extraction |
+| `POST` | `/api/v1/recommend` | Calculate customer size recommendation |
+| `GET` | `/api/v1/wishlist` | Get saved wishlist items |
+| `POST` | `/api/v1/wishlist` | Add product to wishlist |
+| `DELETE` | `/api/v1/wishlist/:id` | Remove product from wishlist |
+| `GET` | `/api/v1/cart` | Get cart with calculated totals |
+| `POST` | `/api/v1/cart/items` | Add item to cart |
+| `PUT` | `/api/v1/cart/items/:id` | Update item quantity |
+| `DELETE` | `/api/v1/cart/items/:id` | Remove item from cart |
+| `POST` | `/api/v1/checkout/create-order` | Server-validated checkout & Razorpay order creation |
+| `POST` | `/api/v1/payments/verify` | Verify Razorpay payment signature & confirm order |
+| `GET` | `/api/v1/orders` | Customer order history & tracking timeline |
+| `GET` | `/api/v1/orders/seller/all` | Seller order fulfilment list |
+| `PUT` | `/api/v1/orders/:id/status` | Update delivery status |
+| `POST` | `/api/v1/chat` | AI Shopping Assistant DB query chatbot |
 
 ---
 
-## 🚀 Quick Start Guide
+## ⚙️ Local Setup & Running
 
-### Prerequisites
-- Node.js `v18+` or `v20+`
-- Python `3.10+` or `3.12+`
-- Google Gemini API Key (`GEMINI_API_KEY`)
-
-### 1. Backend Setup
+### 1. Clone Repository
 ```bash
-cd backend
-
-# Create virtual environment
-python -m venv .venv
-# Activate virtual environment (Windows)
-.venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Environment variables
-cp .env.example .env
-# Edit .env and insert your GEMINI_API_KEY
-
-# Start FastAPI server
-uvicorn app.main:app --reload --port 8000
+git clone https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic.git
+cd FitGenius-AI-dynamic
 ```
 
-### 2. Frontend Setup
+### 2. Install Dependencies
 ```bash
-cd frontend
+# Install root, backend, and frontend dependencies
+npm run install:all
+```
 
-# Install dependencies
-npm install
+### 3. Environment Variables
+Create `.env` in `backend/`:
+```env
+PORT=8001
+GEMINI_API_KEY=your_google_gemini_api_key_here
+JWT_SECRET_KEY=super_secret_key_fitgenius_2026
+RAZORPAY_KEY_ID=rzp_test_fitgenius_demo
+RAZORPAY_KEY_SECRET=fitgenius_demo_secret_key
+```
 
-# Start Next.js development server
+### 4. Launch Development Servers
+```bash
 npm run dev
 ```
 
-Open `http://localhost:3000` in your browser to view the application.
+- **Frontend**: [http://localhost:3000](http://localhost:3000)
+- **Backend API**: [http://localhost:8001/api/v1](http://localhost:8001/api/v1)
 
 ---
 
-## 🌐 Repository & Version Control
+## 📜 License
 
-- **GitHub Repository:** `https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic.git`
-
-To push latest code to your repository:
-```bash
-git add .
-git commit -m "feat: complete end-to-end AI size chart generator with clean TypeScript and FastAPI API"
-git remote add origin https://github.com/Shanmukhavijay999/FitGenius-AI-dynamic.git
-git push -u origin main
-```
+Distributed under the **MIT License**. See `LICENSE` for more information.

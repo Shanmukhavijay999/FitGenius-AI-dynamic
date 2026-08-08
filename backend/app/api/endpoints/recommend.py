@@ -23,12 +23,12 @@ router = APIRouter(prefix="/recommend", tags=["Recommendation"])
 # ---------------------------------------------------------------------------
 
 class BodyMeasurements(BaseModel):
-    height_cm: float = Field(..., ge=100, le=250, description="Customer height in cm")
-    weight_kg: float = Field(..., ge=30, le=300, description="Customer weight in kg")
-    chest_cm: float  = Field(..., ge=50, le=180, description="Chest circumference in cm")
-    waist_cm: float  = Field(..., ge=40, le=180, description="Waist circumference in cm")
-    hip_cm: Optional[float] = Field(None, ge=50, le=200, description="Hip circumference in cm")
-    shoulder_cm: Optional[float] = Field(None, ge=30, le=70, description="Shoulder width in cm")
+    height_cm: float = Field(..., ge=50, le=250, description="Customer height in cm")
+    weight_kg: float = Field(..., ge=10, le=300, description="Customer weight in kg")
+    chest_cm: float  = Field(..., ge=1, le=180, description="Chest circumference in cm")
+    waist_cm: float  = Field(..., ge=1, le=180, description="Waist circumference in cm")
+    hip_cm: Optional[float] = Field(None, ge=1, le=200, description="Hip circumference in cm")
+    shoulder_cm: Optional[float] = Field(None, ge=1, le=70, description="Shoulder width in cm")
 
 
 class GarmentSizeEntry(BaseModel):
